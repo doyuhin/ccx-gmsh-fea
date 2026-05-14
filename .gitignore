@@ -1,0 +1,17 @@
+# CalculiX / Gmsh / OpenCASCADE — generated output (don't track)
+*.dat
+*.frd
+*.cvg
+*.sta
+*.out
+*.msg
+*.rout
+*.eig
+*.msh
+*.pos
+*.bak
+*.lock
+__pycache__/
+*.py[cod]
+.DS_Store
+*.log
