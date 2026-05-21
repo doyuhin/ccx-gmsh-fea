@@ -71,10 +71,15 @@ LEFT_SURF_S, RIGHT_SURF_S
 **---------------------------------------------------------------------
 ** 5) BOUNDARY (model-definition, time-zero)
 **
-**    The two annular axial faces (FIX_FACES) are fully clamped, exactly
-**    like APDL's DA,ConstArea1,ALL,0 and DA,ConstArea2,ALL,0 commands.
-**    DOFs 1,2,3 = translational X,Y,Z. (Rotational DOFs of C3D15 are
-**    nonexistent; nothing to do for 4,5,6.)
+**    The two annular axial faces are fully clamped, exactly like APDL's
+**    DA,ConstArea1,ALL,0 and DA,ConstArea2,ALL,0 commands.
+**
+**    Note: FIX_FACES (as written by the preprocessor) deliberately
+**    EXCLUDES the layer-0 (LEFT_SURF) copies of the fix-face nodes,
+**    because those nodes are slaves of the cyclic-symmetry tie and CCX
+**    forbids slave nodes from also carrying SPCs. The cyclic MPC
+**    propagates the SPC to layer 0 implicitly:
+**        U_left = U_right * exp(i*2*pi*N/M) = 0 * phase = 0.
 **---------------------------------------------------------------------
 *BOUNDARY
 FIX_FACES, 1, 3, 0.
@@ -99,8 +104,6 @@ DISC_ELEMS, CENTRIF, 1.0966227111E+06, 0., 0., 0., 0., 1., 0.
 U
 *EL FILE
 S, E
-*NODE PRINT, NSET=NALL
-U
 *END STEP
 **
 **=====================================================================

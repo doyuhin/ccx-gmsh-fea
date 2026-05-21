@@ -194,41 +194,58 @@ def main() -> int:
             nodes3d[id1] = (X1, Y1, Z1)
 
         if nid in fix2d:
-            fix_set.append(id0)
+            # Layer 0 (LEFT_SURF) is the dependent side of the cyclic-sym tie.
+            # CalculiX forbids a node from being both an SPC dependent AND an
+            # MPC dependent (see ccx 2.23 manual section 7.133 *TIE).
+            # We therefore SPC only the master (layer 2) and interior
+            # (layer 1) copies. The cyclic MPC propagates U=0 to layer 0:
+            #     U_left = U_right * exp(i*2*pi*N/M) = 0 * phase = 0.
+            # fix_set.append(id0)        # <-- intentionally omitted
             fix_set.append(id2)
             if nid in corner_nodes:
                 fix_set.append(nid + offset_L1)
 
     # ---- build C3D15 connectivity ------------------------------------------
+    # CalculiX/Abaqus C3D15 orientation rule: the right-hand normal of nodes
+    # 1->2->3 (face S1) must point TOWARD nodes 4-5-6 (face S2), so that the
+    # (xi, eta, zeta) local frame is right-handed and det(J) > 0.
+    #
+    # The CAX6 corners (c1,c2,c3) from PrePoMax are CCW in the (X_2D, Y_2D)
+    # plane, so their right-hand normal is in the +Z direction (out of the
+    # 2D page). Our revolution puts theta=+15deg at NEGATIVE Z (positive Y
+    # rotation maps +X toward -Z). Therefore we must place the +15deg layer
+    # as face S1 (so its normal points away from -Z, i.e. toward +Z, where
+    # the theta=0 face sits) -- in other words, layer 2 is the "bottom"
+    # face in the wedge connectivity and layer 0 is the "top".
     wedges: list[tuple[int, list[int]]] = []
     for eid, conn in elems:
         c1, c2, c3, m12, m23, m31 = conn
-        # bottom triangle (layer 0)
-        b1 = c1 + offset_L0
-        b2 = c2 + offset_L0
-        b3 = c3 + offset_L0
-        # top triangle (layer 2)
-        t1 = c1 + offset_L2
-        t2 = c2 + offset_L2
-        t3 = c3 + offset_L2
-        # in-plane midsides on bottom
-        b12 = m12 + offset_L0
-        b23 = m23 + offset_L0
-        b31 = m31 + offset_L0
-        # in-plane midsides on top
-        t12 = m12 + offset_L2
-        t23 = m23 + offset_L2
-        t31 = m31 + offset_L2
-        # vertical midsides at layer 1
+        # face S1 (nodes 1..3) at LAYER 2 (theta = +15deg)
+        b1 = c1 + offset_L2
+        b2 = c2 + offset_L2
+        b3 = c3 + offset_L2
+        # face S2 (nodes 4..6) at LAYER 0 (theta = 0)
+        t1 = c1 + offset_L0
+        t2 = c2 + offset_L0
+        t3 = c3 + offset_L0
+        # midsides on face S1 (layer 2)
+        b12 = m12 + offset_L2
+        b23 = m23 + offset_L2
+        b31 = m31 + offset_L2
+        # midsides on face S2 (layer 0)
+        t12 = m12 + offset_L0
+        t23 = m23 + offset_L0
+        t31 = m31 + offset_L0
+        # vertical midsides at layer 1 (between corresponding corners of S1, S2)
         v1 = c1 + offset_L1
         v2 = c2 + offset_L1
         v3 = c3 + offset_L1
 
-        wedge_nodes = [b1, b2, b3,    # 1..3  bottom corners
-                       t1, t2, t3,    # 4..6  top corners
-                       b12, b23, b31, # 7..9  bottom midsides
-                       t12, t23, t31, # 10..12 top midsides
-                       v1, v2, v3]    # 13..15 vertical midsides
+        wedge_nodes = [b1, b2, b3,    # 1..3  face S1 corners (layer 2)
+                       t1, t2, t3,    # 4..6  face S2 corners (layer 0)
+                       b12, b23, b31, # 7..9  face S1 midsides
+                       t12, t23, t31, # 10..12 face S2 midsides
+                       v1, v2, v3]    # 13..15 vertical midsides (layer 1)
         wedges.append((eid, wedge_nodes))
 
     # ---- write output ------------------------------------------------------
