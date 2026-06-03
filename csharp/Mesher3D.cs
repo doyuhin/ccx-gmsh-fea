@@ -250,34 +250,42 @@ namespace LakeCore
         public void WriteToInp(string path)
         {
             using (var sw = new StreamWriter(path))
+                WriteToStream(sw);
+        }
+
+        /// <summary>
+        /// Stream-based variant of WriteToInp. Used by ModalDeckWriter to
+        /// inline the mesh content directly into a deck file without an
+        /// intermediate on-disk artefact.
+        /// </summary>
+        public void WriteToStream(TextWriter writer)
+        {
+            writer.WriteLine("** ----------------------------------------------");
+            writer.WriteLine("** Mesher3D wedge mesh");
+            writer.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                "** Sector angle (rad): {0:R}",  SectorAngleRad));
+            writer.WriteLine("** Wedges/sector  : " + WedgesPerSector);
+            writer.WriteLine("** ----------------------------------------------");
+
+            writer.WriteLine("*NODE, NSET=NALL");
+            foreach (var kv in Nodes.OrderBy(k => k.Key))
             {
-                sw.WriteLine("** ----------------------------------------------");
-                sw.WriteLine("** Mesher3D wedge mesh");
-                sw.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                    "** Sector angle (rad): {0:R}",  SectorAngleRad));
-                sw.WriteLine("** Wedges/sector  : " + WedgesPerSector);
-                sw.WriteLine("** ----------------------------------------------");
+                double[] xyz = kv.Value;
+                writer.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                    "{0}, {1:R}, {2:R}, {3:R}",
+                    kv.Key, xyz[0], xyz[1], xyz[2]));
+            }
 
-                sw.WriteLine("*NODE, NSET=NALL");
-                foreach (var kv in Nodes.OrderBy(k => k.Key))
-                {
-                    double[] xyz = kv.Value;
-                    sw.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "{0}, {1:R}, {2:R}, {3:R}",
-                        kv.Key, xyz[0], xyz[1], xyz[2]));
-                }
+            foreach (var kv in ElementsByRegion)
+            {
+                writer.WriteLine("*ELEMENT, TYPE=C3D15, ELSET=" + kv.Key);
+                foreach (int[] e in kv.Value) WriteElement(writer, e);
+            }
 
-                foreach (var kv in ElementsByRegion)
-                {
-                    sw.WriteLine("*ELEMENT, TYPE=C3D15, ELSET=" + kv.Key);
-                    foreach (int[] e in kv.Value) WriteElement(sw, e);
-                }
-
-                foreach (var kv in NSets)
-                {
-                    sw.WriteLine("*NSET, NSET=" + kv.Key);
-                    WriteIdList(sw, kv.Value.OrderBy(x => x));
-                }
+            foreach (var kv in NSets)
+            {
+                writer.WriteLine("*NSET, NSET=" + kv.Key);
+                WriteIdList(writer, kv.Value.OrderBy(x => x));
             }
         }
 
@@ -326,18 +334,18 @@ namespace LakeCore
             return r;
         }
 
-        private static void WriteElement(StreamWriter sw, int[] e)
+        private static void WriteElement(TextWriter writer, int[] e)
         {
-            sw.Write(e[0]);
+            writer.Write(e[0]);
             for (int j = 1; j < e.Length; j++)
             {
-                sw.Write(",");
-                sw.Write(e[j]);
+                writer.Write(",");
+                writer.Write(e[j]);
             }
-            sw.WriteLine();
+            writer.WriteLine();
         }
 
-        private static void WriteIdList(StreamWriter sw, IEnumerable<int> ids)
+        private static void WriteIdList(TextWriter writer, IEnumerable<int> ids)
         {
             var buf = new List<int>(); int col = 0;
             foreach (int id in ids)
@@ -345,11 +353,11 @@ namespace LakeCore
                 buf.Add(id); col++;
                 if (col == 8)
                 {
-                    sw.WriteLine(string.Join(", ", buf));
+                    writer.WriteLine(string.Join(", ", buf));
                     buf.Clear(); col = 0;
                 }
             }
-            if (buf.Count > 0) sw.WriteLine(string.Join(", ", buf));
+            if (buf.Count > 0) writer.WriteLine(string.Join(", ", buf));
         }
     }
 }
