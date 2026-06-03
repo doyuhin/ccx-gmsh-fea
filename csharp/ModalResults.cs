@@ -78,6 +78,51 @@ namespace LakeCore
         }
 
         // ====================================================================
+        //  HUMAN-READABLE SUMMARY (for testing / inspection)
+        // ====================================================================
+
+        /// <summary>
+        /// Write every parsed (ND, mode) eigenvalue row to a plain-text
+        /// aligned table -- one line per CCX row, columns for nodal
+        /// diameter, mode index, omega in rad/s, and frequency in Hz.
+        /// Useful for spot-checking results without opening the .dat in
+        /// a text editor. Note CCX reports each cyclic-symmetric mode
+        /// twice (real/imag halves of the complex eigenvector); both
+        /// rows are written.
+        /// </summary>
+        public void WriteSummary(string path)
+        {
+            using (var sw = new StreamWriter(path))
+            {
+                sw.WriteLine("# CalculiX cyclic-symmetric modal results");
+                sw.WriteLine("# " + Entries.Count + " eigenvalue rows total");
+                sw.WriteLine("# Note: CCX reports each physical mode twice "
+                             + "(real/imag halves of complex eigenvector);");
+                sw.WriteLine("#       consecutive identical rows are the "
+                             + "duplicate halves of one physical mode.");
+                sw.WriteLine();
+                sw.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                    "{0,4} {1,5} {2,20} {3,18}",
+                    "ND", "Mode", "Omega (rad/s)", "Freq (Hz)"));
+                sw.WriteLine(new string('-', 51));
+
+                int prevNd = int.MinValue;
+                foreach (EigenEntry e in Entries)
+                {
+                    if (e.NodalDiameter != prevNd && prevNd != int.MinValue)
+                        sw.WriteLine();   // blank line between ND blocks
+                    sw.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "{0,4} {1,5} {2,20:E10} {3,18:F4}",
+                        e.NodalDiameter,
+                        e.ModeNumber,
+                        e.OmegaRealRadPerSec,
+                        e.FrequencyHz));
+                    prevNd = e.NodalDiameter;
+                }
+            }
+        }
+
+        // ====================================================================
         //  PARSER
         // ====================================================================
 
