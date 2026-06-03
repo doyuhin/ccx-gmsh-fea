@@ -56,6 +56,17 @@ namespace LakeCore
         public string RightSurfNset       = "RIGHT_SURF";
         public string FixFacesNset        = "FIX_FACES";
 
+        // ------------------ BC tagging (axial-extreme mount edges) -------
+        // Mesher2D auto-discovers the seal's two mounting edges via the
+        // model bounding box and tags them as separate physical curves
+        // with these names. The 2D INP carries them as NSETs; Mesher3D
+        // combines them into the FIX_FACES nset for cyclic-modal use.
+        // BoundingBoxTolerance is the slack used when matching an edge's
+        // own bbox to the global yMin / yMax line (mm).
+        public string FixTopCurveName     = "FIX_TOP";
+        public string FixBotCurveName     = "FIX_BOT";
+        public double BoundingBoxTolerance = 1e-5;
+
         // ------------------ Debug ---------------------------------------
         // If non-null, the 2D mesh is also written to this path before the
         // 3D revolve runs. Useful for inspecting the intermediate.

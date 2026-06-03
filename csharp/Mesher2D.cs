@@ -171,6 +171,14 @@ namespace LakeCore
                 Gmsh.Model.Occ.RemoveAllDuplicates();
                 Gmsh.Model.Occ.Synchronize();
 
+                // Auto-tag the seal's two mounting edges as physical curves
+                // FIX_TOP / FIX_BOT (configurable names). The bounding-box
+                // heuristic is geometry-agnostic: any edge that lies flat on
+                // the model's global yMin or yMax line is a mount face,
+                // regardless of which TaperedToothBuilder / KnifeBuilder /
+                // etc. produced the cross-section.
+                TagAxialExtremeEdges(opts);
+
                 (int, int)[] faceDimTags = Gmsh.Model.GetEntities(2);
 
                 var sealTags = new List<int>();
@@ -255,6 +263,58 @@ namespace LakeCore
         }
 
         // ====================================================================
+        //  AUTO-TAG MOUNT EDGES (FIX_TOP / FIX_BOT) VIA BBOX
+        // ====================================================================
+
+        // Find the substrate's axial-extreme edges -- those that lie flat on
+        // the model's global yMin or yMax line -- and tag them as physical
+        // curves so they survive gmsh's INP writer as NSETs. The check
+        // "edge's own yMin AND yMax both equal global yMax" matches only
+        // edges that lie *along* the extreme; vertical edges that merely
+        // touch a corner at yMax are excluded by construction.
+        private static void TagAxialExtremeEdges(MesherOptions opts)
+        {
+            double tol = opts.BoundingBoxTolerance;
+
+            double gXmin, gYmin, gZmin, gXmax, gYmax, gZmax;
+            Gmsh.Model.GetBoundingBox(-1, -1,
+                out gXmin, out gYmin, out gZmin,
+                out gXmax, out gYmax, out gZmax);
+
+            var topEdges = new List<int>();
+            var botEdges = new List<int>();
+
+            (int, int)[] edges = Gmsh.Model.GetEntities(1);
+            foreach (var dimTag in edges)
+            {
+                int eTag = dimTag.Item2;
+                double eXmin, eYmin, eZmin, eXmax, eYmax, eZmax;
+                Gmsh.Model.GetBoundingBox(1, eTag,
+                    out eXmin, out eYmin, out eZmin,
+                    out eXmax, out eYmax, out eZmax);
+
+                bool flatOnTop = Math.Abs(eYmax - gYmax) < tol
+                              && Math.Abs(eYmin - gYmax) < tol;
+                bool flatOnBot = Math.Abs(eYmax - gYmin) < tol
+                              && Math.Abs(eYmin - gYmin) < tol;
+
+                if      (flatOnTop) topEdges.Add(eTag);
+                else if (flatOnBot) botEdges.Add(eTag);
+            }
+
+            AddPhysicalCurve(topEdges, opts.FixTopCurveName);
+            AddPhysicalCurve(botEdges, opts.FixBotCurveName);
+        }
+
+        private static void AddPhysicalCurve(List<int> edgeTags, string name)
+        {
+            if (edgeTags == null || edgeTags.Count == 0) return;
+            if (string.IsNullOrEmpty(name)) return;
+            int phys = Gmsh.Model.AddPhysicalGroup(1, edgeTags.ToArray(), -1);
+            Gmsh.Model.SetPhysicalName(1, phys, name);
+        }
+
+        // ====================================================================
         //  ADAPTIVE TRANSFINITE TIP
         // ====================================================================
 
@@ -317,8 +377,9 @@ namespace LakeCore
         {
             try
             {
-                double mass;
-                Gmsh.Model.Occ.GetMass(1, edgeTag, out mass);
+                // GetMass returns the mass property (= length for 1D entities
+                // with unit density); the wrapper returns it directly.
+                double mass = Gmsh.Model.Occ.GetMass(1, edgeTag);
                 return Math.Abs(mass);
             }
             catch

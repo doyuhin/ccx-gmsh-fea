@@ -105,10 +105,11 @@ namespace LakeCore
             }
             midsideNodes.ExceptWith(cornerNodes);
 
-            // FIX_FACES source: pick up whichever 2D nset name the upstream
-            // pipeline used. Falls back to empty if no match.
-            var fix2d = LookupNset(mesh2d.NSets,
-                "RIGHTANDLEFT", "FIX_FACES", "FIX_TOP", "FIX_BOT");
+            // FIX_FACES source: union ALL matching nsets so that if Mesher2D
+            // emitted FIX_TOP + FIX_BOT (current convention) both feed into
+            // the 3D FIX_FACES nset. Legacy names FIX_FACES / RIGHTANDLEFT
+            // are also picked up for back-compat with hand-written 2D inps.
+            var fix2d = CombineFixNsets(mesh2d.NSets, options);
 
             // ID-offset scheme: round-up the max 2D ID to the next power of
             // ten so each (layer, kind) pair occupies its own ID range.
@@ -295,14 +296,27 @@ namespace LakeCore
             return in2D + "_ELEMS";
         }
 
-        private static HashSet<int> LookupNset(
-            Dictionary<string, HashSet<int>> nsets, params string[] names)
+        // Combine every matching fix-nset into one set. Unlike a first-match
+        // lookup this picks up *both* FIX_TOP and FIX_BOT (and any legacy
+        // names) so the cyclic-modal FIX_FACES nset covers both mounts.
+        private static HashSet<int> CombineFixNsets(
+            Dictionary<string, HashSet<int>> nsets, MesherOptions opts)
         {
-            foreach (string n in names)
+            var combined = new HashSet<int>();
+            string[] candidates = new[] {
+                opts.FixTopCurveName,
+                opts.FixBotCurveName,
+                "FIX_FACES",
+                "RIGHTANDLEFT",
+            };
+            foreach (string name in candidates)
+            {
+                if (string.IsNullOrEmpty(name)) continue;
                 foreach (var kv in nsets)
-                    if (string.Equals(kv.Key, n, StringComparison.OrdinalIgnoreCase))
-                        return kv.Value;
-            return new HashSet<int>();
+                    if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase))
+                        foreach (int id in kv.Value) combined.Add(id);
+            }
+            return combined;
         }
 
         private static int[] Slice(int[] a, int from, int count)
