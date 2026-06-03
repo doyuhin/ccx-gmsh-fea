@@ -168,8 +168,21 @@ namespace LakeCore
                 Gmsh.Option.SetNumber("Mesh.OptimizeNetgen",  opts.OptimizeMesh ? 1 : 0);
 
                 _ = Gmsh.Model.Occ.ImportShapes(stepPath, false, "");
-                Gmsh.Model.Occ.RemoveAllDuplicates();
+
+                // RemoveAllDuplicates uses BOP fragments internally and the
+                // BOP engine errors with "boolean fragments failed" when
+                // there is only one input shape (nothing to fuse). For the
+                // bare-seal case the substrate is a single TopoDS_Face, so
+                // there's nothing to deduplicate -- skip the call.
+                // Synchronize first so we can use the synced GetEntities,
+                // then sync again after RemoveAllDuplicates rebuilds the
+                // OCC kernel topology.
                 Gmsh.Model.Occ.Synchronize();
+                if (Gmsh.Model.GetEntities(2).Length > 1)
+                {
+                    Gmsh.Model.Occ.RemoveAllDuplicates();
+                    Gmsh.Model.Occ.Synchronize();
+                }
 
                 // Auto-tag the seal's two mounting edges as physical curves
                 // FIX_TOP / FIX_BOT (configurable names). The bounding-box
