@@ -480,11 +480,50 @@ namespace LakeCore
             var elsetOrder = new List<string>();
             var nsetOrder  = new List<string>();
             ParseInpStreaming(path, nodes, elsets, elsetOrder, nsets, nsetOrder);
+
+            // Data invariant for Mesher2D: every CAX6 triangle is CCW in
+            // the XY plane (signed area > 0). Some mesh sources -- gmsh in
+            // particular, depending on the source face's surface normal --
+            // emit triangles in CW order; downstream Mesher3D.Revolve
+            // assumes CCW (otherwise every revolved C3D15 has a negative
+            // jacobian determinant in CalculiX). Flip in-place where needed.
+            EnforceCcwOrientation(nodes, elsets);
+
             return new Mesher2D {
                 Nodes = nodes,
                 ElementsByRegion = elsets,
                 NSets = nsets,
             };
+        }
+
+        // For each CAX6 element, compute the signed area of its corner
+        // triangle (e[1], e[2], e[3]) in XY. If signed area < 0 (CW), swap
+        // c2<->c3 and the matching midsides m12<->m31 so the element
+        // becomes CCW while preserving the same topology.
+        private static void EnforceCcwOrientation(
+            Dictionary<int, double[]>        nodes,
+            Dictionary<string, List<int[]>>  elsetsByRegion)
+        {
+            foreach (var kv in elsetsByRegion)
+            {
+                foreach (int[] e in kv.Value)
+                {
+                    if (e.Length < 7) continue;
+                    double[] p1 = nodes[e[1]];
+                    double[] p2 = nodes[e[2]];
+                    double[] p3 = nodes[e[3]];
+                    double signedArea = 0.5 * (
+                        (p2[0] - p1[0]) * (p3[1] - p1[1]) -
+                        (p3[0] - p1[0]) * (p2[1] - p1[1]));
+                    if (signedArea < 0.0)
+                    {
+                        // swap c2 <-> c3
+                        int tc = e[2]; e[2] = e[3]; e[3] = tc;
+                        // swap m12 <-> m31  (midsides 4 and 6 in CAX6 indexing)
+                        int tm = e[4]; e[4] = e[6]; e[6] = tm;
+                    }
+                }
+            }
         }
 
         private static void ParseInpStreaming(
